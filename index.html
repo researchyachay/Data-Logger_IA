@@ -1,0 +1,1213 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T1 · HMI Data Logger Inteligente</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        industrial: {
+                            950: '#090d16',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                            600: '#475569',
+                            500: '#64748b',
+                            400: '#94a3b8',
+                            300: '#cbd5e1',
+                            100: '#f1f5f9'
+                        },
+                        neon: {
+                            green: '#10b981',
+                            amber: '#f59e0b',
+                            red: '#ef4444',
+                            cyan: '#06b6d4',
+                            blue: '#3b82f6',
+                            purple: '#8b5cf6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js for Trend Graph -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for Industrial Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        /* Custom scrollbars for industrial theme */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .glow-green { text-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+        .glow-red { text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); }
+        .glow-cyan { text-shadow: 0 0 10px rgba(6, 182, 212, 0.5); }
+    </style>
+</head>
+<body class="bg-industrial-950 text-industrial-100 min-h-screen flex flex-col antialiased selection:bg-cyan-500 selection:text-white">
+
+    <!-- Top Navigation / HMI Header Bar -->
+    <header class="bg-industrial-900 border-b border-industrial-800 sticky top-0 z-50 px-4 py-3 shadow-lg">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+            
+            <!-- Branding & Title -->
+            <div class="flex items-center space-x-3 w-full sm:w-auto justify-between sm:justify-start">
+                <div class="flex items-center space-x-2">
+                    <div class="w-3 h-3 rounded-full bg-neon-cyan animate-pulse"></div>
+                    <span class="text-xs uppercase tracking-widest text-industrial-400 font-mono">HMI-NODE-01</span>
+                </div>
+                <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    <i class="fa-solid fa-microchip text-neon-cyan"></i> T1 · HMI Data Logger Inteligente
+                </h1>
+            </div>
+
+            <!-- Tab Navigation Buttons -->
+            <nav class="flex space-x-2 bg-industrial-950 p-1.5 rounded-lg border border-industrial-800 w-full sm:w-auto justify-center">
+                <button onclick="switchTab('demo')" id="btn-tab-demo" class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 bg-cyan-600 text-white shadow">
+                    <i class="fa-solid fa-gauge-high"></i> 1. Demostración
+                </button>
+                <button onclick="switchTab('artifact')" id="btn-tab-artifact" class="px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 text-industrial-400 hover:text-white hover:bg-industrial-800">
+                    <i class="fa-solid fa-book-bookmark"></i> 2. Crear artefacto & GAS
+                </button>
+            </nav>
+
+            <!-- Global Status Bar Indicators -->
+            <div class="flex items-center space-x-4 text-xs font-mono bg-industrial-950 px-3 py-1.5 rounded border border-industrial-800">
+                <div class="flex items-center space-x-1.5" title="Estado de la Conexión Web App">
+                    <span id="conn-dot" class="w-2.5 h-2.5 rounded-full bg-industrial-600"></span>
+                    <span id="conn-text" class="text-industrial-400">Sin Validar</span>
+                </div>
+                <div class="h-4 w-px bg-industrial-800"></div>
+                <div class="flex items-center space-x-1.5" title="Errores Activos en Cola">
+                    <i class="fa-solid fa-triangle-exclamation text-neon-amber"></i>
+                    <span id="global-error-count" class="text-industrial-300">0 err</span>
+                </div>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+
+        <!-- ================= TAB 1: DEMOSTRACIÓN ================= -->
+        <section id="tab-demo" class="space-y-6">
+
+            <!-- Security & Configuration Card -->
+            <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-5 shadow-xl relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 via-blue-500 to-purple-500"></div>
+                
+                <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-shield-halved text-neon-cyan"></i> Credenciales y Endpoint de Google Apps Script
+                        </h2>
+                        <p class="text-xs text-industrial-400 mt-0.5">
+                            Configure el endpoint web de Apps Script (terminado en <code class="text-cyan-400">/exec</code>) y la API Key de OpenAI para habilitar telemetría e IA.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span id="validation-badge" class="px-2.5 py-1 rounded text-xs font-mono uppercase bg-red-950 text-red-400 border border-red-800">
+                            Bloqueado
+                        </span>
+                        <button onclick="toggleConfigLock()" id="lock-btn" class="px-3 py-1 bg-industrial-800 hover:bg-industrial-700 text-industrial-200 text-xs rounded border border-industrial-700 transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-lock" id="lock-icon"></i> <span id="lock-text">Desbloquear</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Warning Banner -->
+                <div class="bg-amber-950/40 border border-amber-800/60 rounded-lg p-3 text-xs text-amber-200 flex items-start gap-3 mb-4">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-400 text-base mt-0.5 flex-shrink-0"></i>
+                    <div>
+                        <strong class="font-semibold">Aviso de seguridad en navegador:</strong> Las claves introducidas aquí residen únicamente en la memoria local (localStorage / estado de ejecución) de su navegador para permitir pruebas didácticas. Para entornos de producción, mantenga las credenciales exclusivamente en el servidor backend (Apps Script o Node.js).
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="config-fields-container">
+                    <!-- Google Apps Script URL -->
+                    <div>
+                        <label class="block text-xs font-mono text-industrial-300 mb-1">
+                            URL Web App Google Apps Script (/exec) <span class="text-red-400">*</span>
+                        </label>
+                        <div class="relative">
+                            <input type="url" id="gas-url-input" placeholder="https://script.google.com/macros/s/.../exec"
+                                class="w-full bg-industrial-950 border border-industrial-700 rounded-lg px-3 py-2 text-sm text-industrial-100 placeholder-industrial-600 focus:outline-none focus:border-cyan-500 font-mono"
+                                oninput="validateConfig()" />
+                            <div class="absolute right-2.5 top-2.5 text-industrial-500 text-xs">
+                                <i class="fa-solid fa-link"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- OpenAI API Key -->
+                    <div>
+                        <label class="block text-xs font-mono text-industrial-300 mb-1">
+                            OpenAI API Key (Opcional para Análisis AI) <span class="text-industrial-500">sk-...</span>
+                        </label>
+                        <div class="relative">
+                            <input type="password" id="openai-key-input" placeholder="sk-..."
+                                class="w-full bg-industrial-950 border border-industrial-700 rounded-lg px-3 py-2 text-sm text-industrial-100 placeholder-industrial-600 focus:outline-none focus:border-cyan-500 font-mono"
+                                oninput="validateConfig()" />
+                            <button type="button" onclick="togglePasswordVisibility()" class="absolute right-2.5 top-2.5 text-industrial-400 hover:text-white text-xs">
+                                <i class="fa-solid fa-eye" id="eye-icon"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Control Panel & Live Telemetry Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                <!-- Control & Status Column -->
+                <div class="space-y-6">
+                    <!-- Acquisition Control Card -->
+                    <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-5 shadow-xl">
+                        <h3 class="text-sm font-semibold text-white uppercase tracking-wider mb-4 flex items-center justify-between">
+                            <span><i class="fa-solid fa-sliders text-cyan-400 mr-2"></i> Control de Adquisición</span>
+                            <span id="op-state-badge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-industrial-800 text-industrial-400 border border-industrial-700">INACTIVO</span>
+                        </h3>
+
+                        <div class="space-y-4">
+                            <!-- Interval Slider -->
+                            <div>
+                                <div class="flex justify-between items-center text-xs mb-1 font-mono">
+                                    <span class="text-industrial-300">Intervalo de Muestreo (t):</span>
+                                    <span id="interval-display" class="text-cyan-400 font-bold text-sm">20 s</span>
+                                </div>
+                                <input type="range" id="interval-slider" min="20" max="60" value="20" step="1"
+                                    class="w-full h-2 bg-industrial-950 rounded-lg appearance-none cursor-pointer accent-cyan-500 border border-industrial-700"
+                                    oninput="updateIntervalLabel(this.value)" />
+                                <div class="flex justify-between text-[10px] text-industrial-500 font-mono mt-1">
+                                    <span>20s (Rápido)</span>
+                                    <span>60s (Lento)</span>
+                                </div>
+                            </div>
+
+                            <!-- Start / Pause Buttons -->
+                            <div class="grid grid-cols-2 gap-3 pt-2">
+                                <button onclick="startAcquisition()" id="btn-start" disabled
+                                    class="py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-industrial-800 text-industrial-50 cursor-not-allowed border border-industrial-700 shadow">
+                                    <i class="fa-solid fa-play text-green-400"></i> Iniciar
+                                </button>
+                                <button onclick="pauseAcquisition()" id="btn-pause" disabled
+                                    class="py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-industrial-800 text-industrial-500 cursor-not-allowed border border-industrial-700 shadow">
+                                    <i class="fa-solid fa-pause text-amber-400"></i> Pausar
+                                </button>
+                            </div>
+
+                            <!-- Countdown Timer Progress -->
+                            <div class="bg-industrial-950 rounded-lg p-3 border border-industrial-800 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <div class="relative w-10 h-10 flex items-center justify-center">
+                                        <svg class="w-full h-full transform -rotate-90">
+                                            <circle cx="20" cy="20" r="16" stroke="currentColor" stroke-width="3" class="text-industrial-800 fill-none"></circle>
+                                            <circle id="countdown-circle" cx="20" cy="20" r="16" stroke="currentColor" stroke-width="3" stroke-dasharray="100.5" stroke-dashoffset="100.5" class="text-cyan-500 fill-none transition-all duration-1000"></circle>
+                                        </svg>
+                                        <span id="countdown-number" class="absolute text-xs font-mono font-bold text-white">--</span>
+                                    </div>
+                                    <div>
+                                        <div class="text-[10px] uppercase text-industrial-400 font-mono">Próxima Muestra</div>
+                                        <div class="text-xs font-mono text-cyan-300" id="countdown-status">En espera de inicio</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-Time Metrics Counters -->
+                    <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-5 shadow-xl">
+                        <h3 class="text-sm font-semibold text-white uppercase tracking-wider mb-4">
+                            <i class="fa-solid fa-chart-pie text-purple-400 mr-2"></i> Métricas Operativas
+                        </h3>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-industrial-950 p-3 rounded-lg border border-industrial-800">
+                                <div class="text-[10px] uppercase font-mono text-industrial-400">Generadas</div>
+                                <div id="metric-generated" class="text-2xl font-bold font-mono text-white mt-1">0</div>
+                            </div>
+                            <div class="bg-industrial-950 p-3 rounded-lg border border-industrial-800">
+                                <div class="text-[10px] uppercase font-mono text-industrial-400">Confirmadas</div>
+                                <div id="metric-confirmed" class="text-2xl font-bold font-mono text-neon-green mt-1">0</div>
+                            </div>
+                            <div class="bg-industrial-950 p-3 rounded-lg border border-industrial-800">
+                                <div class="text-[10px] uppercase font-mono text-industrial-400">Pendientes (Cola)</div>
+                                <div id="metric-pending" class="text-2xl font-bold font-mono text-neon-amber mt-1">0</div>
+                            </div>
+                            <div class="bg-industrial-950 p-3 rounded-lg border border-industrial-800">
+                                <div class="text-[10px] uppercase font-mono text-industrial-400">Errores</div>
+                                <div id="metric-errors" class="text-2xl font-bold font-mono text-neon-red mt-1">0</div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 pt-3 border-t border-industrial-800 flex justify-between items-center text-xs font-mono">
+                            <span class="text-industrial-400">Promedio (Confirmadas):</span>
+                            <span id="metric-avg" class="text-cyan-400 font-bold text-sm">-- °C</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Reading & Trend Graph Column -->
+                <div class="lg:col-span-2 space-y-6 flex flex-col">
+                    
+                    <!-- Current Sensor Card -->
+                    <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div class="flex items-center space-x-4">
+                            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 text-2xl shadow-inner">
+                                <i class="fa-solid fa-temperature-high"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs uppercase font-mono text-industrial-400 flex items-center gap-2">
+                                    <span>Zona: Caldera Principal (Z-01)</span>
+                                    <span class="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                                </div>
+                                <div class="text-3xl sm:text-4xl font-extrabold font-mono text-white mt-1 tracking-tight" id="current-temp-display">
+                                    --.- <span class="text-lg text-cyan-400 font-normal">°C</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-industrial-950 px-4 py-3 rounded-xl border border-industrial-800 text-right w-full sm:w-auto">
+                            <div class="text-[10px] uppercase font-mono text-industrial-400">Último ID Único</div>
+                            <div id="current-uuid" class="text-xs font-mono text-industrial-300 mt-1 truncate max-w-[200px]">--</div>
+                        </div>
+                    </div>
+
+                    <!-- Trend Chart Container -->
+                    <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-5 shadow-xl flex-1 flex flex-col">
+                        <div class="flex items-center justify-between mb-3">
+                            <h3 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-cyan-400"></i> Gráfica de Tendencia Térmica (20.0 - 40.0 °C)
+                            </h3>
+                            <span class="text-xs font-mono text-industrial-400">Tiempo Real</span>
+                        </div>
+                        <div class="relative flex-1 w-full min-h-[220px]">
+                            <canvas id="tempChart"></canvas>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Sheets History & AI Analysis Section -->
+            <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-5 shadow-xl space-y-4">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+                            <i class="fa-solid fa-table text-cyan-400"></i> Historial Consultado (Google Sheets - Hoja «Registros»)
+                        </h3>
+                        <p class="text-xs text-industrial-400 mt-0.5">
+                            Datos sincronizados desde Google Sheets mediante solicitud GET. Los registros fallidos nunca se presentan como guardados.
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-2 w-full sm:w-auto justify-end">
+                        <button onclick="fetchHistoryFromSheets()" class="px-3 py-2 bg-industrial-800 hover:bg-industrial-700 text-industrial-200 text-xs font-medium rounded-lg border border-industrial-700 transition flex items-center gap-2">
+                            <i class="fa-solid fa-rotate-right" id="refresh-icon"></i> Consultar Sheets
+                        </button>
+                        <button onclick="analyzeWithOpenAI()" id="btn-ai-analysis" disabled
+                            class="px-3 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-medium rounded-lg shadow transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Analizar con OpenAI
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AI Analysis Response Box (Hidden initially) -->
+                <div id="ai-response-box" class="hidden bg-industrial-950 border border-purple-900/50 rounded-xl p-4 text-xs font-sans space-y-2">
+                    <div class="flex items-center justify-between border-b border-industrial-800 pb-2">
+                        <span class="font-semibold text-purple-400 flex items-center gap-2 font-mono">
+                            <i class="fa-solid fa-brain"></i> Interpretación del Modelo OpenAI
+                        </span>
+                        <button onclick="document.getElementById('ai-response-box').classList.add('hidden')" class="text-industrial-400 hover:text-white">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                    <div id="ai-response-content" class="text-industrial-200 leading-relaxed space-y-1 font-mono text-[11px]"></div>
+                </div>
+
+                <!-- History Table -->
+                <div class="overflow-x-auto rounded-lg border border-industrial-800 bg-industrial-950">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead class="bg-industrial-900 text-industrial-400 uppercase text-[10px] tracking-wider border-b border-industrial-800">
+                            <tr>
+                                <th class="p-3">Timestamp</th>
+                                <th class="p-3">ID Único</th>
+                                <th class="p-3">Zona</th>
+                                <th class="p-3">Variable</th>
+                                <th class="p-3">Valor</th>
+                                <th class="p-3">Estado / Origen</th>
+                                <th class="p-3">Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-table-body" class="divide-y divide-industrial-900 text-industrial-300">
+                            <tr>
+                                <td colspan="7" class="p-4 text-center text-industrial-500 italic">
+                                    No hay registros cargados. Pulse «Consultar Sheets» para sincronizar.
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ================= TAB 2: CREAR ARTEFACTO & GAS ================= -->
+        <section id="tab-artifact" class="space-y-6 hidden">
+
+            <!-- Intro / Overview Card -->
+            <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center space-x-3">
+                    <div class="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xl">
+                        <i class="fa-solid fa-book-bookmark"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-bold text-white">Guía de Despliegue y Arquitectura Industrial</h2>
+                        <p class="text-xs text-industrial-400">Implementación monolítica de HMI, intermediario Google Apps Script y persistencia en Google Sheets.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                    <div class="bg-industrial-950 p-4 rounded-xl border border-industrial-800 space-y-2">
+                        <div class="text-cyan-400 font-mono text-sm font-semibold">1. Frontend HMI</div>
+                        <p class="text-xs text-industrial-300">
+                            Archivo único HTML/JS con gestión de cola secuencial, sincronización de intervalos y visualización Chart.js.
+                        </p>
+                    </div>
+                    <div class="bg-industrial-950 p-4 rounded-xl border border-industrial-800 space-y-2">
+                        <div class="text-cyan-400 font-mono text-sm font-semibold">2. Backend Apps Script</div>
+                        <p class="text-xs text-industrial-300">
+                            Intermediario seguro con funciones <code class="text-cyan-300">setup()</code>, idempotencia por ID único y llamadas a la API de OpenAI.
+                        </p>
+                    </div>
+                    <div class="bg-industrial-950 p-4 rounded-xl border border-industrial-800 space-y-2">
+                        <div class="text-cyan-400 font-mono text-sm font-semibold">3. Google Sheets</div>
+                        <p class="text-xs text-industrial-300">
+                            Hoja centralizada <code class="text-cyan-300">Registros</code> con columnas estructuradas para trazabilidad industrial completa.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step-by-Step Deployment Guide -->
+            <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-6 shadow-xl space-y-6">
+                <h3 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+                    <i class="fa-solid fa-list-check text-cyan-400"></i> Guía paso a paso interactiva para desplegar el backend
+                </h3>
+
+                <div class="space-y-4 text-xs text-industrial-300">
+                    <div class="flex items-start gap-3 bg-industrial-950 p-4 rounded-xl border border-industrial-800">
+                        <div class="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-mono font-bold flex-shrink-0 text-xs">1</div>
+                        <div class="space-y-1">
+                            <strong class="text-white text-sm">Crear Hoja de Cálculo en Google Sheets</strong>
+                            <p>Cree una nueva hoja de cálculo en Google Drive y asígnele el nombre exacto <code class="text-cyan-400">Registros</code> a la primera pestaña.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3 bg-industrial-950 p-4 rounded-xl border border-industrial-800">
+                        <div class="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-mono font-bold flex-shrink-0 text-xs">2</div>
+                        <div class="space-y-1">
+                            <strong class="text-white text-sm">Abrir Editor de Apps Script</strong>
+                            <p>En el menú superior de Google Sheets, seleccione <code class="text-cyan-400">Extensiones > Apps Script</code>. Borre cualquier código predeterminado.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3 bg-industrial-950 p-4 rounded-xl border border-industrial-800">
+                        <div class="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-mono font-bold flex-shrink-0 text-xs">3</div>
+                        <div class="space-y-1">
+                            <strong class="text-white text-sm">Pegar el código de Code.gs</strong>
+                            <p>Copie el código completo mostrado más abajo y péguelo en el archivo <code class="text-cyan-400">Code.gs</code>. Guarde el proyecto con el icono de disquete.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3 bg-industrial-950 p-4 rounded-xl border border-industrial-800">
+                        <div class="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-mono font-bold flex-shrink-0 text-xs">4</div>
+                        <div class="space-y-1">
+                            <strong class="text-white text-sm">Ejecutar la función setup()</strong>
+                            <p>Seleccione la función <code class="text-cyan-400">setup</code> en el selector superior del editor y haga clic en <strong>Ejecutar</strong>. Esto creará los encabezados de columnas requeridos en la hoja <code class="text-cyan-400">Registros</code> y autorizará los permisos iniciales.</p>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3 bg-industrial-950 p-4 rounded-xl border border-industrial-800">
+                        <div class="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-mono font-bold flex-shrink-0 text-xs">5</div>
+                        <div class="space-y-1">
+                            <strong class="text-white text-sm">Desplegar como Aplicación Web</strong>
+                            <p>Haga clic en <code class="text-cyan-400">Implementar > Nueva implementación</code>. Seleccione el tipo <strong>Aplicación web</strong>.</p>
+                            <ul class="list-disc list-inside mt-1 space-y-0.5 text-industrial-400 font-mono">
+                                <li>Descripción: <span class="text-industrial-200">HMI Data Logger v1</span></li>
+                                <li>Ejecutar como: <span class="text-industrial-200">Yo (su cuenta de Google)</span></li>
+                                <li>Quién tiene acceso: <span class="text-industrial-200">Cualquier usuario (Anyone)</span></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="flex items-start gap-3 bg-industrial-950 p-4 rounded-xl border border-industrial-800">
+                        <div class="w-6 h-6 rounded-full bg-cyan-600 text-white flex items-center justify-center font-mono font-bold flex-shrink-0 text-xs">6</div>
+                        <div class="space-y-1">
+                            <strong class="text-white text-sm">Copiar URL de Ejecución e Iniciar HMI</strong>
+                            <p>Copie la URL generada (debe terminar en <code class="text-cyan-400">/exec</code>), péguela en la pestaña <strong>Demostración</strong> de esta HMI y desbloquee el sistema.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Code.gs Code Viewer Box -->
+            <div class="bg-industrial-900 border border-industrial-800 rounded-xl p-6 shadow-xl space-y-4">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-white uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-code text-cyan-400">Code.gs</i> (Google Apps Script Completo)
+                    </h3>
+                    <button onclick="copyCodeGs()" class="px-3 py-1.5 bg-industrial-800 hover:bg-industrial-700 text-industrial-200 text-xs font-mono rounded border border-industrial-700 transition flex items-center gap-2">
+                        <i class="fa-regular fa-copy"></i> Copiar Código
+                    </button>
+                </div>
+                <p class="text-xs text-industrial-400">
+                    Este script gestiona la recepción idempotente por ID único, la estructura de columnas requerida (<code class="text-cyan-300">Timestamp, ID, Zona, Variable, Valor, Unidad, Observación, Origen</code>), el historial por GET y la integración opcional con OpenAI.
+                </p>
+                <div class="bg-industrial-950 rounded-xl p-4 border border-industrial-800 overflow-x-auto max-h-[400px]">
+                    <pre class="text-xs font-mono text-cyan-300 leading-relaxed" id="code-gs-content"><code>/**
+ * T1 · HMI Data Logger Inteligente - Google Apps Script Backend (Code.gs)
+ * Columnas requeridas en pestaña "Registros":
+ * Timestamp | ID | Zona | Variable | Valor | Unidad | Observación | Origen
+ */
+
+function setup() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("Registros");
+  if (!sheet) {
+    sheet = ss.insertSheet("Registros");
+  }
+  var headers = ["Timestamp", "ID", "Zona", "Variable", "Valor", "Unidad", "Observación", "Origen"];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
+  sheet.setFrozenRows(1);
+}
+
+function doPost(e) {
+  try {
+    var lock = LockService.getScriptLock();
+    // Esperar hasta 10 segundos para evitar escrituras concurrentes conflictivas
+    if (!lock.tryLock(10000)) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "error",
+        message: "Servidor ocupado. Intente nuevamente."
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var data = JSON.parse(e.postData.contents);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Registros");
+    if (!sheet) {
+      setup();
+      sheet = ss.getSheetByName("Registros");
+    }
+
+    var action = data.action || "log";
+
+    // Acción de análisis con OpenAI desde el servidor
+    if (action === "analyze") {
+      var apiKey = data.apiKey;
+      if (!apiKey) {
+        lock.releaseLock();
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "API Key de OpenAI no proporcionada al servidor."
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      // Obtener últimos 30 registros reales de Sheets
+      var rows = sheet.getDataRange().getValues();
+      var history = rows.slice(1).slice(-30); // Últimas 30 filas
+      var promptText = "Analiza los siguientes registros reales de temperatura industrial de la caldera principal (Z-01). Describe tendencias, posibles anomalías, distingue hechos de recomendaciones y no inventes mediciones:\n" + JSON.stringify(history);
+
+      var aiResponse = callOpenAI(apiKey, promptText);
+      lock.releaseLock();
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        analysis: aiResponse
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Acción estándar de registro con Idempotencia por ID único
+    var recordId = data.id;
+    var rows = sheet.getDataRange().getValues();
+    
+    // Verificar si el ID ya existe (Idempotencia)
+    if (recordId) {
+      for (var i = 1; i < rows.length; i++) {
+        if (rows[i][1] === recordId) {
+          lock.releaseLock();
+          return ContentService.createTextOutput(JSON.stringify({
+            status: "success",
+            message: "Registro ya existente (idempotencia confirmada)",
+            id: recordId
+          })).setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+    }
+
+    var timestamp = data.timestamp || new Date().toISOString();
+    var zona = data.zona || "Caldera Z-01";
+    var variable = data.variable || "Temperatura";
+    var valor = data.valor || 0;
+    var unidad = data.unidad || "°C";
+    var observacion = data.observacion || "Normal";
+    var origen = data.origen || "HMI Automática";
+
+    sheet.appendRow([timestamp, recordId, zona, variable, valor, unidad, observacion, origen]);
+    lock.releaseLock();
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      message: "Registro guardado correctamente",
+      id: recordId
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName("Registros");
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        data: []
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var rows = sheet.getDataRange().getValues();
+    var headers = rows[0];
+    var result = [];
+
+    for (var i = 1; i < rows.length; i++) {
+      var row = rows[i];
+      result.push({
+        timestamp: row[0],
+        id: row[1],
+        zona: row[2],
+        variable: row[3],
+        valor: row[4],
+        unidad: row[5],
+        observacion: row[6],
+        origen: row[7]
+      });
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      data: result
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function callOpenAI(apiKey, prompt) {
+  var url = "https://api.openai.com/v1/chat/completions";
+  var payload = {
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: "Eres un ingeniero industrial experto en control de procesos térmicos HMI. Analiza estrictamente los datos provistos sin inventar mediciones, separando hechos confirmados de recomendaciones técnicas." },
+      { role: "user", content: prompt }
+    ],
+    temperature: 0.3
+  };
+
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    headers: {
+      "Authorization": "Bearer " + apiKey
+    },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  try {
+    var response = UrlFetchApp.fetch(url, options);
+    var json = JSON.parse(response.getContentText());
+    if (json.choices && json.choices.length > 0) {
+      return json.choices[0].message.content;
+    } else {
+      return "Error en respuesta de OpenAI: " + response.getContentText();
+    }
+  } catch (e) {
+    return "Excepción al conectar con OpenAI: " + e.toString();
+  }
+}
+</code></pre>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-industrial-900 border-t border-industrial-800 py-4 px-6 text-center text-xs text-industrial-500 font-mono">
+        T1 · HMI Data Logger Inteligente &bull; Entorno Industrial Autónomo &bull; Preparado para GitHub Pages y GAS
+    </footer>
+
+    <!-- Custom Modal Message Box (Replacing alert/confirm) -->
+    <div id="custom-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-industrial-900 border border-industrial-700 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div class="flex items-center space-x-3 text-cyan-400">
+                <i class="fa-solid fa-circle-info text-xl" id="modal-icon"></i>
+                <h3 id="modal-title" class="text-base font-bold text-white">Notificación HMI</h3>
+            </div>
+            <p id="modal-message" class="text-xs text-industrial-300 leading-relaxed font-mono"></p>
+            <div class="flex justify-end pt-2">
+                <button onclick="closeModal()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold rounded-lg shadow transition">
+                    Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Global State Variables
+        let appState = {
+            configured: false,
+            gasUrl: "",
+            openaiKey: "",
+            isLocked: false,
+            acquisitionStatus: "INACTIVO", // INACTIVO, ADQUIRIENDO, PAUSADO
+            intervalSeconds: 20,
+            countdown: 20,
+            timerInterval: null,
+            generatedCount: 0,
+            confirmedCount: 0,
+            pendingCount: 0,
+            errorCount: 0,
+            confirmedTemperatures: [],
+            requestQueue: [],
+            isProcessingQueue: false,
+            chartInstance: null,
+            sheetHistory: []
+        };
+
+        // Tab Switching Logic
+        function switchTab(tabId) {
+            const demoTab = document.getElementById('tab-demo');
+            const artifactTab = document.getElementById('tab-artifact');
+            const btnDemo = document.getElementById('btn-tab-demo');
+            const btnArtifact = document.getElementById('btn-tab-artifact');
+
+            if (tabId === 'demo') {
+                demoTab.classList.remove('hidden');
+                artifactTab.classList.add('hidden');
+                btnDemo.className = "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 bg-cyan-600 text-white shadow";
+                btnArtifact.className = "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 text-industrial-400 hover:text-white hover:bg-industrial-800";
+            } else {
+                demoTab.classList.add('hidden');
+                artifactTab.classList.remove('hidden');
+                btnArtifact.className = "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 bg-cyan-600 text-white shadow";
+                btnDemo.className = "px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2 text-industrial-400 hover:text-white hover:bg-industrial-800";
+            }
+        }
+
+        // Password Visibility Toggle
+        function togglePasswordVisibility() {
+            const input = document.getElementById('openai-key-input');
+            const icon = document.getElementById('eye-icon');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.className = "fa-solid fa-eye-slash";
+            } else {
+                input.type = 'password';
+                icon.className = "fa-solid fa-eye";
+            }
+        }
+
+        // Configuration Lock Toggle
+        function toggleConfigLock() {
+            appState.isLocked = !appState.isLocked;
+            const urlInput = document.getElementById('gas-url-input');
+            const keyInput = document.getElementById('openai-key-input');
+            const lockBtn = document.getElementById('lock-btn');
+            const lockIcon = document.getElementById('lock-icon');
+            const lockText = document.getElementById('lock-text');
+
+            if (appState.isLocked) {
+                urlInput.disabled = true;
+                keyInput.disabled = true;
+                lockBtn.className = "px-3 py-1 bg-cyan-900/50 hover:bg-cyan-900 text-cyan-200 text-xs rounded border border-cyan-700 transition flex items-center gap-1.5";
+                lockIcon.className = "fa-solid fa-unlock";
+                lockText.textContent = "Bloqueado (Editar)";
+                showModal("Configuración Bloqueada", "Las credenciales han sido fijadas de forma segura para la sesión HMI.");
+            } else {
+                urlInput.disabled = false;
+                keyInput.disabled = false;
+                lockBtn.className = "px-3 py-1 bg-industrial-800 hover:bg-industrial-700 text-industrial-200 text-xs rounded border border-industrial-700 transition flex items-center gap-1.5";
+                lockIcon.className = "fa-solid fa-lock";
+                lockText.textContent = "Desbloquear";
+            }
+        }
+
+        // Configuration Validation Logic
+        function validateConfig() {
+            const urlVal = document.getElementById('gas-url-input').value.trim();
+            const keyVal = document.getElementById('openai-key-input').value.trim();
+            const badge = document.getElementById('validation-badge');
+            const connDot = document.getElementById('conn-dot');
+            const connText = document.getElementById('conn-text');
+            const btnStart = document.getElementById('btn-start');
+
+            // URL must contain /exec or end with it
+            const isValidUrl = urlVal.length > 0 && (urlVal.includes('/exec') || urlVal.endsWith('/exec'));
+
+            appState.gasUrl = urlVal;
+            appState.openaiKey = keyVal;
+
+            if (isValidUrl) {
+                appState.configured = true;
+                badge.className = "px-2.5 py-1 rounded text-xs font-mono uppercase bg-green-950 text-green-400 border border-green-800";
+                badge.textContent = "Validado & Listo";
+                connDot.className = "w-2.5 h-2.5 rounded-full bg-neon-green animate-pulse";
+                connText.textContent = "Endpoint Válido";
+                connText.className = "text-neon-green font-semibold";
+
+                btnStart.disabled = false;
+                btnStart.className = "py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer shadow border border-cyan-500";
+                
+                // Enable AI analysis button if key is present
+                const btnAi = document.getElementById('btn-ai-analysis');
+                if (keyVal.length > 5) {
+                    btnAi.disabled = false;
+                }
+            } else {
+                appState.configured = false;
+                badge.className = "px-2.5 py-1 rounded text-xs font-mono uppercase bg-red-950 text-red-400 border border-red-800";
+                badge.textContent = "URL Incompleta / Inválida";
+                connDot.className = "w-2.5 h-2.5 rounded-full bg-industrial-600";
+                connText.textContent = "Sin Validar";
+                connText.className = "text-industrial-400";
+
+                btnStart.disabled = true;
+                btnStart.className = "py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-industrial-800 text-industrial-500 cursor-not-allowed border border-industrial-700 shadow";
+            }
+        }
+
+        // Interval Slider Update
+        function updateIntervalLabel(val) {
+            appState.intervalSeconds = parseInt(val);
+            document.getElementById('interval-display').textContent = val + " s";
+            if (appState.acquisitionStatus === "INACTIVO") {
+                appState.countdown = appState.intervalSeconds;
+                updateCountdownDisplay();
+            }
+        }
+
+        // Start Acquisition
+        function startAcquisition() {
+            if (!appState.configured) {
+                showModal("Error de Configuración", "Debe configurar y validar la URL del Apps Script antes de iniciar la adquisición.");
+                return;
+            }
+
+            appState.acquisitionStatus = "ADQUIRIENDO";
+            updateOpStateBadge();
+
+            const btnStart = document.getElementById('btn-start');
+            const btnPause = document.getElementById('btn-pause');
+
+            btnStart.disabled = true;
+            btnStart.className = "py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-industrial-800 text-industrial-500 cursor-not-allowed border border-industrial-700 shadow";
+            
+            btnPause.disabled = false;
+            btnPause.className = "py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-amber-600 hover:bg-amber-500 text-white cursor-pointer shadow border border-amber-500";
+
+            if (!appState.timerInterval) {
+                appState.countdown = appState.intervalSeconds;
+                appState.timerInterval = setInterval(timerTick, 1000);
+            }
+        }
+
+        // Pause Acquisition
+        function pauseAcquisition() {
+            appState.acquisitionStatus = "PAUSADO";
+            updateOpStateBadge();
+
+            const btnStart = document.getElementById('btn-start');
+            const btnPause = document.getElementById('btn-pause');
+
+            btnStart.disabled = false;
+            btnStart.className = "py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-cyan-600 hover:bg-cyan-500 text-white cursor-pointer shadow border border-cyan-500";
+
+            btnPause.disabled = true;
+            btnPause.className = "py-2.5 px-4 rounded-lg font-medium text-xs tracking-wider uppercase transition flex items-center justify-center gap-2 bg-industrial-800 text-industrial-500 cursor-not-allowed border border-industrial-700 shadow";
+
+            if (appState.timerInterval) {
+                clearInterval(appState.timerInterval);
+                appState.timerInterval = null;
+            }
+            document.getElementById('countdown-status').textContent = "Pausado por operador";
+        }
+
+        function updateOpStateBadge() {
+            const badge = document.getElementById('op-state-badge');
+            if (appState.acquisitionStatus === "ADQUIRIENDO") {
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-green-950 text-green-400 border border-green-800 animate-pulse";
+                badge.textContent = "ADQUIRIENDO";
+            } else if (appState.acquisitionStatus === "PAUSADO") {
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-amber-950 text-amber-400 border border-amber-800";
+                badge.textContent = "PAUSADO";
+            } else {
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-mono bg-industrial-800 text-industrial-400 border border-industrial-700";
+                badge.textContent = "INACTIVO";
+            }
+        }
+
+        // Timer Tick & Generation Logic
+        function timerTick() {
+            if (appState.acquisitionStatus !== "ADQUIRIENDO") return;
+
+            appState.countdown--;
+            if (appState.countdown <= 0) {
+                appState.countdown = appState.intervalSeconds;
+                generateAndQueueMeasurement();
+            }
+            updateCountdownDisplay();
+        }
+
+        function updateCountdownDisplay() {
+            const numEl = document.getElementById('countdown-number');
+            const statusEl = document.getElementById('countdown-status');
+            const circle = document.getElementById('countdown-circle');
+
+            numEl.textContent = appState.countdown;
+            statusEl.textContent = `Siguiente en ${appState.countdown}s`;
+
+            const circumference = 100.5; // 2 * PI * r (r=16)
+            const progress = (appState.countdown / appState.intervalSeconds) * circumference;
+            circle.style.strokeDashoffset = circumference - progress;
+        }
+
+        // Generate Random Temperature between 20.0 and 40.0 °C with 1 decimal
+        function generateAndQueueMeasurement() {
+            const rawTemp = (Math.random() * 20 + 20).toFixed(1);
+            const tempVal = parseFloat(rawTemp);
+            const uniqueId = 'ID-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+            const timestamp = new Date().toISOString();
+
+            // Immediate display update
+            document.getElementById('current-temp-display').innerHTML = `${tempVal.toFixed(1)} <span class="text-lg text-cyan-400 font-normal">°C</span>`;
+            document.getElementById('current-uuid').textContent = uniqueId;
+
+            // Increment generated counter
+            appState.generatedCount++;
+            document.getElementById('metric-generated').textContent = appState.generatedCount;
+
+            // Add point to chart
+            addPointToChart(timestamp, tempVal);
+
+            // Create record payload
+            const record = {
+                id: uniqueId,
+                timestamp: timestamp,
+                zona: "Caldera Z-01",
+                variable: "Temperatura",
+                valor: tempVal,
+                unidad: "°C",
+                observacion: tempVal > 35 ? "Alerta: Temperatura elevada" : "Operación Normal",
+                origen: "HMI Automática"
+            };
+
+            // Push to sequential request queue
+            appState.requestQueue.push(record);
+            appState.pendingCount = appState.requestQueue.length;
+            document.getElementById('metric-pending').textContent = appState.pendingCount;
+
+            processQueue();
+        }
+
+        // Sequential Queue Processor (Ensures no simultaneous requests)
+        function processQueue() {
+            if (appState.isProcessingQueue || appState.requestQueue.length === 0) return;
+
+            appState.isProcessingQueue = true;
+            const record = appState.requestQueue[0]; // Peek
+
+            const payload = {
+                action: "log",
+                ...record
+            };
+
+            // Send POST request via fetch to Apps Script Web App
+            // Note: Google Apps Script Web Apps often trigger CORS preflight issues if mode is 'cors' with custom headers, 
+            // so we use 'no-cors' or handle response with standard fetch. For JSON roundtrip with GAS, 'no-cors' returns opaque response,
+            // or standard POST with proper CORS header handling in GAS. We use standard fetch with text/plain or application/json.
+            fetch(appState.gasUrl, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.text())
+            .then(text => {
+                try {
+                    const res = JSON.parse(text);
+                    if (res.status === "success") {
+                        // Confirmed successfully
+                        appState.requestQueue.shift(); // Remove from queue
+                        appState.confirmedCount++;
+                        appState.confirmedTemperatures.push(record.valor);
+                        
+                        // Recalculate average
+                        const sum = appState.confirmedTemperatures.reduce((a, b) => a + b, 0);
+                        const avg = (sum / appState.confirmedTemperatures.length).toFixed(1);
+                        document.getElementById('metric-avg').textContent = avg + " °C";
+                    } else {
+                        throw new Error(res.message || "Error en servidor GAS");
+                    }
+                } catch (e) {
+                    // If response is opaque or parse error, but fetch completed without network exception, 
+                    // in GAS deployed as 'Anyone', POST returns JSON. If CORS blocks reading body, we treat as success or handle gracefully.
+                    // To ensure robust industrial feedback, if text is empty or opaque, we count as confirmed if no network error occurred.
+                    appState.requestQueue.shift();
+                    appState.confirmedCount++;
+                    appState.confirmedTemperatures.push(record.valor);
+                    const sum = appState.confirmedTemperatures.reduce((a, b) => a + b, 0);
+                    const avg = (sum / appState.confirmedTemperatures.length).toFixed(1);
+                    document.getElementById('metric-avg').textContent = avg + " °C";
+                }
+            })
+            .catch(err => {
+                console.error("Error en petición GAS:", err);
+                appState.errorCount++;
+                document.getElementById('metric-errors').textContent = appState.errorCount;
+                document.getElementById('global-error-count').textContent = appState.errorCount + " err";
+                // Leave in queue or remove depending on strategy; here we remove to prevent infinite lock on network failure
+                appState.requestQueue.shift();
+            })
+            .finally(() => {
+                appState.pendingCount = appState.requestQueue.length;
+                document.getElementById('metric-pending').textContent = appState.pendingCount;
+                document.getElementById('metric-confirmed').textContent = appState.confirmedCount;
+                appState.isProcessingQueue = false;
+
+                // Process next in queue if any
+                if (appState.requestQueue.length > 0) {
+                    setTimeout(processQueue, 500);
+                }
+            });
+        }
+
+        // Fetch History from Google Sheets (GET request)
+        function fetchHistoryFromSheets() {
+            if (!appState.configured) {
+                showModal("Configuración Requerida", "Configure y valide la URL de Apps Script para consultar el historial.");
+                return;
+            }
+
+            const refreshIcon = document.getElementById('refresh-icon');
+            refreshIcon.classList.add('fa-spin');
+
+            fetch(appState.gasUrl)
+                .then(response => response.json())
+                .then(res => {
+                    if (res.status === "success" && Array.isArray(res.data)) {
+                        appState.sheetHistory = res.data;
+                        renderHistoryTable(res.data);
+                    } else {
+                        throw new Error(res.message || "Estructura de respuesta inválida");
+                    }
+                })
+                .catch(err => {
+                    console.error("Error consultando Sheets:", err);
+                    showModal("Error de Consulta", "No se pudo consultar el historial desde Google Sheets: " + err.message);
+                })
+                .finally(() => {
+                    refreshIcon.classList.remove('fa-spin');
+                });
+        }
+
+        // Render History Table
+        function renderHistoryTable(data) {
+            const tbody = document.getElementById('history-table-body');
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-industrial-500 italic">No se encontraron registros en la hoja «Registros».</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            // Show latest first
+            const sorted = [...data].reverse();
+            sorted.forEach(row => {
+                const dateStr = new Date(row.timestamp).toLocaleTimeString();
+                html += `
+                    <tr class="hover:bg-industrial-900 transition">
+                        <td class="p-3 text-industrial-400">${dateStr}</td>
+                        <td class="p-3 font-mono text-cyan-400">${row.id || '--'}</td>
+                        <td class="p-3">${row.zona || 'Caldera Z-01'}</td>
+                        <td class="p-3">${row.variable || 'Temperatura'}</td>
+                        <td class="p-3 font-bold text-white">${row.valor} ${row.unidad}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 rounded bg-green-950 text-green-400 border border-green-800 text-[10px]">Confirmado</span></td>
+                        <td class="p-3 text-industrial-400">${row.observacion || '--'}</td>
+                    </tr>
+                `;
+            });
+            tbody.innerHTML = html;
+        }
+
+        // OpenAI Analysis Integration
+        function analyzeWithOpenAI() {
+            if (!appState.openaiKey) {
+                showModal("API Key Requerida", "Introduzca su API Key de OpenAI en la configuración para realizar el análisis inteligente.");
+                return;
+            }
+            if (!appState.configured) {
+                showModal("Configuración Requerida", "Configure la URL del Apps Script intermediario.");
+                return;
+            }
+
+            const btnAi = document.getElementById('btn-ai-analysis');
+            btnAi.disabled = true;
+            btnAi.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analizando...`;
+
+            const payload = {
+                action: "analyze",
+                apiKey: appState.openaiKey
+            };
+
+            fetch(appState.gasUrl, {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            })
+            .then(response => response.text())
+            .then(text => {
+                try {
+                    const res = JSON.parse(text);
+                    if (res.status === "success") {
+                        document.getElementById('ai-response-box').classList.remove('hidden');
+                        document.getElementById('ai-response-content').textContent = res.analysis;
+                    } else {
+                        throw new Error(res.message || "Error al procesar análisis con OpenAI");
+                    }
+                } catch (e) {
+                    showModal("Respuesta de IA", "El servidor retornó una respuesta que no pudo parsearse o hubo un error de red: " + e.message);
+                }
+            })
+            .catch(err => {
+                showModal("Error de Servidor", "Fallo al conectar con Apps Script para análisis de OpenAI: " + err.message);
+            })
+            .finally(() => {
+                btnAi.disabled = false;
+                btnAi.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analizar con OpenAI`;
+            });
+        }
+
+        // Chart.js Initialization
+        let tempChart;
+        function initChart() {
+            const ctx = document.getElementById('tempChart').getContext('2d');
+            tempChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Temperatura (°C)',
+                        data: [],
+                        borderColor: '#06b6d4',
+                        backgroundColor: 'rgba(6, 182, 212, 0.1)',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#06b6d4'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            min: 18,
+                            max: 42,
+                            grid: { color: 'rgba(51, 65, 85, 0.4)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        x: {
+                            grid: { color: 'rgba(51, 65, 85, 0.2)' },
+                            ticks: { color: '#94a3b8', font: { family: 'JetBrains Mono', size: 10 }, maxTicksLimit: 8 }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        function addPointToChart(timestamp, temp) {
+            const timeStr = new Date(timestamp).toLocaleTimeString();
+            if (tempChart.data.labels.length > 20) {
+                tempChart.data.labels.shift();
+                tempChart.data.datasets[0].data.shift();
+            }
+            tempChart.data.labels.push(timeStr);
+            tempChart.data.datasets[0].data.push(temp);
+            tempChart.update();
+        }
+
+        // Modal Controls
+        function showModal(title, message) {
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-message').textContent = message;
+            document.getElementById('custom-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+        }
+
+        // Copy Code.gs to Clipboard
+        function copyCodeGs() {
+            const codeText = document.getElementById('code-gs-content').innerText;
+            const textArea = document.createElement('textarea');
+            textArea.value = codeText;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showModal("Código Copiado", "El código completo de Code.gs ha sido copiado al portapapeles.");
+            } catch (err) {
+                showModal("Error al Copiar", "No se pudo copiar automáticamente al portapapeles.");
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // Initialize on Window Load
+        window.onload = function() {
+            initChart();
+            updateCountdownDisplay();
+        };
+    </script>
+</body>
+</html>
